@@ -3,11 +3,24 @@
 // the CUDA_FN macros, and then include this file, sometimes
 // repeatedly within the same compilation unit.
 
+#define STRINGIFY(name) # name
+
+#if defined(__CUDA_API_VERSION_INTERNAL) || defined(CUDA_API_PER_THREAD_DEFAULT_STREAM)
+    #define __CUDA_API_PER_THREAD_DEFAULT_STREAM
+    #define __CUDA_API(api)      STRINGIFY(api)
+    #define __CUDA_API_PTDS(api) STRINGIFY(api ## _ptds)
+    #define __CUDA_API_PTSZ(api) STRINGIFY(api ## _ptsz)
+#else
+    #define __CUDA_API(api)      STRINGIFY(api)
+    #define __CUDA_API_PTDS(api) STRINGIFY(api)
+    #define __CUDA_API_PTSZ(api) STRINGIFY(api)
+#endif
+
 #ifndef CUDA_FN
-#define CUDA_FN(ret, fn, args)
+#define CUDA_FN(ret, fn, fn_rt, args)
 #endif
 #ifndef CUDA_FN_OPTIONAL
-#define CUDA_FN_OPTIONAL(ret, fn, args)
+#define CUDA_FN_OPTIONAL(ret, fn, fn_rt, args)
 #endif
 #ifndef CUDA_FN_3020
 #define CUDA_FN_3020(ret, fn, fn_3020, args) CUDA_FN(ret, fn, args)
@@ -37,15 +50,15 @@ CUDA_FN_3020(CUresult, cuMemcpyHtoD, cuMemcpyHtoD_v2, (CUdeviceptr dstDevice, co
 CUDA_FN_3020(CUresult, cuMemcpyDtoH, cuMemcpyDtoH_v2, (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpyDtoD, cuMemcpyDtoD_v2, (CUdeviceptr dstHost, CUdeviceptr srcDevice, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpy3D, cuMemcpy3D_v2, (const CUDA_MEMCPY3D *pCopy));
-CUDA_FN(CUresult, cuLaunchKernel, (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra));
+CUDA_FN(CUresult, cuLaunchKernel, __CUDA_API_PTSZ(cuLaunchKernel), (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra));
 CUDA_FN(CUresult, cuCtxSynchronize, ());
 
-CUDA_FN_4000(CUresult, cuCtxPushCurrent, cuCtxPushCurrent_v2, (CUcontext ctx));
-CUDA_FN_4000(CUresult, cuCtxPopCurrent, cuCtxPopCurrent_v2, (CUcontext * pctx));
+CUDA_FN_4000(CUresult, cuCtxPushCurrent, __CUDA_API(cuCtxPushCurrent_v2), (CUcontext ctx));
+CUDA_FN_4000(CUresult, cuCtxPopCurrent, __CUDA_API(cuCtxPopCurrent_v2), (CUcontext *pctx));
 
-CUDA_FN(CUresult, cuPointerGetAttribute, (void *result, int query, CUdeviceptr ptr));
+CUDA_FN(CUresult, cuPointerGetAttribute, __CUDA_API(cuPointerGetAttribute), (void *result, int query, CUdeviceptr ptr));
 
-CUDA_FN_OPTIONAL(CUresult, cuStreamSynchronize, (CUstream hStream));
+CUDA_FN_OPTIONAL(CUresult, cuStreamSynchronize, __CUDA_API_PTSZ(cuStreamSynchronize), (CUstream hStream));
 
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL

@@ -12,8 +12,8 @@ namespace Internal {
 namespace Cuda {
 
 // Define the function pointers for the CUDA API.
-#define CUDA_FN(ret, fn, args) WEAK ret(CUDAAPI *fn) args;
-#define CUDA_FN_OPTIONAL(ret, fn, args) WEAK ret(CUDAAPI *fn) args;
+#define CUDA_FN(ret, fn, fn_rt, args) WEAK ret(CUDAAPI *fn) args;
+#define CUDA_FN_OPTIONAL(ret, fn, fn_rt, args) WEAK ret(CUDAAPI *fn) args;
 #define CUDA_FN_3020(ret, fn, fn_3020, args) WEAK ret(CUDAAPI *fn) args;
 #define CUDA_FN_4000(ret, fn, fn_4000, args) WEAK ret(CUDAAPI *fn) args;
 #include "cuda_functions.h"
@@ -70,10 +70,10 @@ WEAK void load_libcuda(void *user_context) {
     debug(user_context) << "    load_libcuda (user_context: " << user_context << ")\n";
     halide_assert(user_context, cuInit == NULL);
 
-#define CUDA_FN(ret, fn, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn);
-#define CUDA_FN_OPTIONAL(ret, fn, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn, true);
-#define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_3020);
-#define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, #fn_4000);
+#define CUDA_FN(ret, fn, fn_rt, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, fn_rt);
+#define CUDA_FN_OPTIONAL(ret, fn, fn_rt, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, fn_rt, true);
+#define CUDA_FN_3020(ret, fn, fn_3020, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, fn_3020);
+#define CUDA_FN_4000(ret, fn, fn_4000, args) fn = get_cuda_symbol<ret(CUDAAPI *) args>(user_context, fn_4000);
 #include "cuda_functions.h"
 #undef CUDA_FN
 #undef CUDA_FN_OPTIONAL
@@ -186,7 +186,11 @@ WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *str
     // There are two default streams we could use. stream 0 is fully
     // synchronous. stream 2 gives a separate non-blocking stream per
     // thread.
+#if defined(__CUDA_API_PER_THREAD_DEFAULT_STREAM)
+    *stream = (CUstream)2;
+#else
     *stream = 0;
+#endif
     return 0;
 }
 
