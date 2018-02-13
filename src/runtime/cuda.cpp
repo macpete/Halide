@@ -647,6 +647,7 @@ WEAK int halide_cuda_device_free(void *user_context, halide_buffer_t *buf) {
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
+    debug(user_context) << "    clock: " << t_before / 1e6 << "\n";
 #endif
 
     halide_assert(user_context, validate_device_pointer(user_context, buf));
@@ -810,6 +811,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
+    debug(user_context) << "    clock: " << t_before / 1e6 << "\n";
 #endif
 
     CUdeviceptr p = 0;
