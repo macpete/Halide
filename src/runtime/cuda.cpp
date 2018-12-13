@@ -918,7 +918,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 
 namespace {
 WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
-                                       uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
+                                       uint64_t src, uint64_t dst, int d, bool from_host, bool to_host, CUstream stream) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -929,14 +929,14 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
                             << " to " << (to_host ? "host" : "device") << ", "
                             << (void *)src << " -> " << (void *)dst << ", " << c.chunk_size << " bytes\n";
         if (!from_host && to_host) {
-            debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
-            err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
+            debug(user_context) << "cuMemcpyDtoHAsync(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            err = cuMemcpyDtoHAsync((void *)dst, (CUdeviceptr)src, c.chunk_size, stream);
         } else if (from_host && !to_host) {
-            debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
-            err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
+            debug(user_context) << "cuMemcpyHtoDAsync(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            err = cuMemcpyHtoDAsync((CUdeviceptr)dst, (void *)src, c.chunk_size, stream);
         } else if (!from_host && !to_host) {
-            debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
-            err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
+            debug(user_context) << "cuMemcpyDtoDAsync(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
+            err = cuMemcpyDtoDAsync((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size, stream);
         } else if (dst != src) {
             debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
             // Could reach here if a user called directly into the
@@ -951,7 +951,7 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d - 1]; i++) {
-            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
+            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host, stream);
             dst_off += c.dst_stride_bytes[d - 1];
             src_off += c.src_stride_bytes[d - 1];
             if (err) {
@@ -994,6 +994,15 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
             return ctx.error;
         }
 
+        CUstream stream;
+        int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+        if (result != 0) {
+            error(user_context)
+                << "CUDA: In halide_cuda_buffer_copy, halide_cuda_get_stream returned " << result
+                << ", using default stream.\n";
+            stream = 0;
+        }
+
         debug(user_context)
             << "CUDA: halide_cuda_buffer_copy (user_context: " << user_context
             << ", src: " << src << ", dst: " << dst << ")\n";
@@ -1008,7 +1017,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         }
 #endif
 
-        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
+        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host, stream);
 
 #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
@@ -1092,13 +1101,17 @@ WEAK int halide_cuda_device_sync(void *user_context, struct halide_buffer_t *) {
         if (result != 0) {
             error(user_context) << "CUDA: In halide_cuda_device_sync, halide_cuda_get_stream returned " << result << "\n";
         }
+        debug(user_context)
+            << "    cuStreamSynchronize(" << stream << ")\n";
         err = cuStreamSynchronize(stream);
     } else {
+        debug(user_context)
+            << "    cuCtxSynchronize()\n";
         err = cuCtxSynchronize();
     }
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuCtxSynchronize failed: "
-                            << get_error_name(err);
+        error(user_context)
+            << (cuStreamSynchronize != NULL ? "CUDA: cuStreamSynchronize failed: " : "CUDA: cuCtxSynchronize failed: ") << get_error_name(err) << "\n";
         return err;
     }
 
@@ -1212,12 +1225,25 @@ WEAK int halide_cuda_run(void *user_context,
     }
 
 #ifdef DEBUG_RUNTIME
+#if 0
+    debug(user_context)
+        << "    cuCtxSynchronize()\n";
     err = cuCtxSynchronize();
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuCtxSynchronize failed: "
                             << get_error_name(err);
         return err;
     }
+#else
+    debug(user_context)
+        << "    cuStreamSynchronize(" << stream << ")\n";
+    err = cuStreamSynchronize(stream);
+    if (err != CUDA_SUCCESS) {
+        error(user_context) << "CUDA: cuStreamSynchronize failed: "
+                            << get_error_name(err);
+        return err;
+    }
+#endif
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
