@@ -1019,6 +1019,21 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
 
         err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host, stream);
 
+        if (err == CUDA_SUCCESS) {
+            if (cuStreamSynchronize != NULL) {
+                debug(user_context) << "    cuStreamSynchronize(" << stream << ")\n";
+                err = cuStreamSynchronize(stream);
+            } else {
+                debug(user_context) << "    cuCtxSynchronize()\n";
+                err = cuCtxSynchronize();
+            }
+            if (err != CUDA_SUCCESS) {
+                error(user_context)
+                    << (cuStreamSynchronize != NULL ? "CUDA: cuStreamSynchronize failed: " : "CUDA: cuCtxSynchronize failed: ")
+                    << get_error_name((CUresult)err) << "\n";
+            }
+        }
+
 #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
