@@ -372,6 +372,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         int max_grid_size[] = {0, 0, 0};
         int max_shared_mem = 0, max_constant_mem = 0;
         int cc_major = 0, cc_minor = 0;
+        int mem_bus_width = 0, mem_clock_rate = 0;
 
         struct {
             int *dst;
@@ -390,6 +391,8 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
             {&max_constant_mem, CU_DEVICE_ATTRIBUTE_TOTAL_CONSTANT_MEMORY},
             {&cc_major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR},
             {&cc_minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR},
+            {&mem_bus_width, CU_DEVICE_ATTRIBUTE_GLOBAL_MEMORY_BUS_WIDTH},
+            {&mem_clock_rate, CU_DEVICE_ATTRIBUTE_MEMORY_CLOCK_RATE},
             {NULL, CU_DEVICE_ATTRIBUTE_MAX}};
 
         // Do all the queries.
@@ -441,7 +444,9 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
             << "      max constant memory per block: " << max_constant_mem << "\n"
             << "      compute capability " << cc_major << "." << cc_minor << "\n"
             << "      cuda cores: " << num_cores << " x " << threads_per_core
-            << " = " << num_cores * threads_per_core << "\n";
+            << " = " << num_cores * threads_per_core << "\n"
+            << "      memory bandwidth: "
+            << (uint64_t)mem_bus_width * mem_clock_rate / 4000000 << "GB/s\n";
     }
 #endif
 
