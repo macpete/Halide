@@ -452,7 +452,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
 
     // Create context
     debug(user_context) << "    cuCtxCreate " << dev << " -> ";
-    err = cuCtxCreate(ctx, 0, dev);
+    err = cuCtxCreate(ctx, 8 /* 8 == CU_CTX_MAP_HOST */, dev);
     if (err != CUDA_SUCCESS) {
         debug(user_context) << get_error_name(err) << "\n";
         error(user_context) << "CUDA: cuCtxCreate failed: "
